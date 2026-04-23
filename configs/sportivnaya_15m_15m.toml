@@ -1,0 +1,29 @@
+
+name = "sportivnaya_15m_15m"
+bucket_minutes = 15
+horizon_minutes = 15
+primary_mode = "auto"
+
+[data]
+data_dir = "./data"
+pass_filename = "PASS_ALL_202503242210.csv"
+pass_sep = ";"
+cache_dir = "./data/cache"
+transport_type_id = 1
+place_ids = [1623, 1624]
+
+[features]
+lag_minutes = [15, 30, 45, 60, 120, 180, 240, 360, 1440, 1455, 2880]
+rolling_minutes = [30, 60, 120, 180, 240]
+context_features = ["highload_daylag", "hour_cyclical"]
+highload_quantile = 0.8
+load_weight_gamma = 1.0
+weekday_filter = [0, 1, 2, 3]
+
+
+[output]
+root_dir = "./outputs"
+save_tables = true
+save_plots = true
+save_markdown = true
+save_run_config = true

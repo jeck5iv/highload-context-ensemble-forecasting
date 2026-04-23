@@ -1,0 +1,29 @@
+
+name = "sportivnaya_60m_360m"
+bucket_minutes = 60
+horizon_minutes = 360
+primary_mode = "auto"
+
+[data]
+data_dir = "./data"
+pass_filename = "PASS_ALL_202503242210.csv"
+pass_sep = ";"
+cache_dir = "./data/cache"
+transport_type_id = 1
+place_ids = [1623, 1624]
+
+[features]
+lag_minutes = [60, 120, 180, 240, 360, 720, 1440, 1500, 2880]
+rolling_minutes = [60, 120, 180, 240, 360]
+context_features = ["highload_daylag", "hour_cyclical"]
+highload_quantile = 0.8
+load_weight_gamma = 1.0
+weekday_filter = [0, 1, 2, 3]
+
+
+[output]
+root_dir = "./outputs"
+save_tables = true
+save_plots = true
+save_markdown = true
+save_run_config = true

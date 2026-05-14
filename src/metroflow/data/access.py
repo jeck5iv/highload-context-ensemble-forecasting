@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 try:
     import duckdb
 except ModuleNotFoundError:
@@ -87,6 +88,12 @@ def make_station_filters(cfg: ExperimentConfig) -> list[str]:
     return filters
 
 
+
+def _filter_signature(filters: list[str]) -> str:
+    payload = ' AND '.join(filters) if filters else 'all'
+    return hashlib.md5(payload.encode('utf-8')).hexdigest()[:10]
+
+
 def load_pass_data(cfg: ExperimentConfig) -> pd.DataFrame:
     data_dir = Path(cfg.data.data_dir)
     cache_dir = Path(cfg.data.cache_dir)
@@ -97,12 +104,12 @@ def load_pass_data(cfg: ExperimentConfig) -> pd.DataFrame:
         raise FileNotFoundError(csv_path)
 
     full_parquet = cache_dir / f'{csv_path.stem}_full.parquet'
-    filt_parquet = cache_dir / f'{csv_path.stem}_filtered.parquet'
 
     if _needs_rebuild(full_parquet, csv_path):
         build_full_parquet(csv_path, full_parquet, sep=cfg.data.pass_sep)
 
     filters = make_station_filters(cfg)
+    filt_parquet = cache_dir / f'{csv_path.stem}_filtered_{_filter_signature(filters)}.parquet'
     if _needs_rebuild(filt_parquet, full_parquet):
         build_slim_filtered_parquet(full_parquet, filt_parquet, filters)
 

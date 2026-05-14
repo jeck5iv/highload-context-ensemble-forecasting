@@ -1,4 +1,4 @@
-name = "sportivnaya_15m_60m_rich_context"
+name = "sportivnaya_15m_60m_meta_rich_boost_rich_opday3"
 bucket_minutes = 15
 horizon_minutes = 60
 primary_mode = "auto"
@@ -15,7 +15,11 @@ station_metadata_path = "./data/stations_metadata.csv"
 [features]
 lag_minutes = [15, 30, 45, 60, 120, 180, 240, 360, 1440, 1455, 2880]
 rolling_minutes = [30, 60, 120, 180, 240]
+operational_day_start_hour = 3
+
 context_features = ["highload_daylag", "hour_cyclical", "continuous_load_score", "local_slope", "daylag_deviation", "rolling_volatility"]
+
+boosting_context_features = ["highload_daylag", "hour_cyclical", "continuous_load_score", "local_slope", "daylag_deviation", "rolling_volatility"]
 highload_quantile = 0.8
 load_weight_gamma = 1.0
 weekday_filter = [0, 1, 2, 3]

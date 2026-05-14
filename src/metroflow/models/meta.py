@@ -10,6 +10,18 @@ from metroflow.config import ExperimentConfig
 from metroflow.evaluation.metrics import calc_metrics
 
 
+
+CONTEXT_META_COLS = [
+    'hl_daylag',
+    'hour_sin',
+    'hour_cos',
+    'continuous_load_score',
+    'local_slope_1',
+    'local_slope_2',
+    'daylag_deviation',
+    'prev_count_ratio_daylag',
+]
+
 def fit_positive_blend(pred_matrix, y_true):
     reg = LinearRegression(fit_intercept=False, positive=True)
     reg.fit(pred_matrix, y_true)
@@ -52,6 +64,7 @@ def apply_context_blend(test_df: pd.DataFrame, model_cols: list[str], weights_by
 
 def build_meta_features(df: pd.DataFrame, primary_col: str, model_cols: list[str], use_context=True):
     X = pd.DataFrame(index=df.index)
+    context_added = []
     for c in model_cols:
         X[f'pred_{c}'] = df[c].values.astype(float)
     for c in model_cols:
@@ -65,9 +78,20 @@ def build_meta_features(df: pd.DataFrame, primary_col: str, model_cols: list[str
     X['pred_max'] = preds_mat.max(axis=1)
     X['pred_range'] = X['pred_max'] - X['pred_min']
     if use_context:
-        for c in ['hl_daylag', 'hour_sin', 'hour_cos', 'continuous_load_score', 'local_slope_1', 'local_slope_2']:
+        for c in CONTEXT_META_COLS:
             if c in df.columns:
                 X[c] = df[c].values
+                context_added.append(c)
+
+    X = X.replace([np.inf, -np.inf], np.nan)
+    non_context_cols = [c for c in X.columns if c not in context_added]
+    if X[non_context_cols].isna().any().any():
+        bad_cols = X[non_context_cols].columns[X[non_context_cols].isna().any()].tolist()
+        raise ValueError(f'NaNs in base prediction meta-features: {bad_cols}')
+    if context_added:
+                                                                            
+                                                                       
+        X[context_added] = X[context_added].fillna(0.0)
     return X
 
 
@@ -79,7 +103,7 @@ def build_prediction_tables(cfg: ExperimentConfig, split: dict, preds: dict[str,
     for name, payload in preds.items():
         val_table[name] = payload['val_pred']
         test_table[name] = payload['test_pred']
-    for c in ['hl_daylag', 'hour_sin', 'hour_cos', 'continuous_load_score', 'local_slope_1', 'local_slope_2']:
+    for c in CONTEXT_META_COLS + ['hl_actual']:
         if c in val_df.columns:
             val_table[c] = val_df[c].values
         if c in test_df.columns:

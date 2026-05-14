@@ -25,6 +25,15 @@ class FeatureConfig:
         'highload_daylag',
         'hour_cyclical',
     ])
+                                                                  
+                                                                        
+                                                                     
+                                                                   
+    boosting_context_features: list[str] | None = None
+                                                       
+                                                                   
+                                              
+    operational_day_start_hour: int = 0
     highload_quantile: float = 0.8
     load_weight_gamma: float = 1.0
     weekday_filter: list[int] = field(default_factory=lambda: [0, 1, 2, 3])

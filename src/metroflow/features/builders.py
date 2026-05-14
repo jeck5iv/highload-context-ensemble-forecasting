@@ -43,27 +43,45 @@ def make_target_frame(pass_df: pd.DataFrame, cfg: ExperimentConfig) -> pd.DataFr
         df[f'roll_sum_{w}'] = df['count'].shift(1).rolling(w).sum()
         df[f'roll_mean_{w}'] = df['count'].shift(1).rolling(w).mean()
 
+                                                                               
+                                                                             
+                                                                               
+                                                                        
+    op_shift = pd.Timedelta(hours=getattr(cfg.features, 'operational_day_start_hour', 0))
+    op_time = df[cfg.time_col] - op_shift
+
     slot_in_day = (
-        df[cfg.time_col].dt.hour * (60 // cfg.bucket_minutes)
-        + df[cfg.time_col].dt.minute // cfg.bucket_minutes
+        op_time.dt.hour * (60 // cfg.bucket_minutes)
+        + op_time.dt.minute // cfg.bucket_minutes
     )
     df['slot_in_day'] = slot_in_day.astype(int)
-    df['day_of_week'] = df[cfg.time_col].dt.dayofweek
-    df['date'] = df[cfg.time_col].dt.date
+    df['calendar_date'] = df[cfg.time_col].dt.date
+    df['operational_date'] = op_time.dt.date
+                                                                              
+    df['date'] = df['operational_date']
+    df['day_of_week'] = op_time.dt.dayofweek
 
     if 'hour_cyclical' in cfg.features.context_features:
         df['hour_sin'] = np.sin(2 * np.pi * df['slot_in_day'] / cfg.day_lag)
         df['hour_cos'] = np.cos(2 * np.pi * df['slot_in_day'] / cfg.day_lag)
 
+                                                            
+                                                                                    
     df['target_daylag'] = df['target_h'].shift(cfg.day_lag)
-
-    if 'continuous_load_score' in cfg.features.context_features:
-        baseline = df['target_daylag'].replace(0, np.nan)
-        df['continuous_load_score'] = (df['target_h'].shift(1) / baseline).replace([np.inf, -np.inf], np.nan)
+    df['count_daylag'] = df['count'].shift(cfg.day_lag)
+    df['prev_count'] = df['count'].shift(1)
+    df['prev_count_daylag'] = df['count'].shift(cfg.day_lag + 1)
 
     if 'local_slope' in cfg.features.context_features:
         df['local_slope_1'] = df['count'].shift(1) - df['count'].shift(2)
         df['local_slope_2'] = df['count'].shift(1) - df['count'].shift(3)
+
+    if 'daylag_deviation' in cfg.features.context_features:
+                                                                                       
+                                                                                                     
+        df['daylag_deviation'] = df['prev_count'] - df['prev_count_daylag']
+        denom = df['prev_count_daylag'].replace(0, np.nan)
+        df['prev_count_ratio_daylag'] = (df['prev_count'] / denom).replace([np.inf, -np.inf], np.nan)
 
     if 'rolling_volatility' in cfg.features.context_features:
         short_w = min(build_roll_windows(cfg))
@@ -86,12 +104,24 @@ def attach_context_feature(train_df: pd.DataFrame, pred_df: pd.DataFrame, cfg: E
     q = cfg.features.highload_quantile
     q_train = train_df['target_h'].quantile(q)
 
+                                                                                                
+                                                                                               
+    train_df['hl_actual'] = (train_df['target_h'] > q_train).astype(int)
+    pred_df['hl_actual'] = (pred_df['target_h'] > q_train).astype(int)
+
+                                                                                         
+                                                                                   
     if 'highload_daylag' in cfg.features.context_features:
         train_df['hl_daylag'] = (train_df['target_daylag'] > q_train).astype(int)
         pred_df['hl_daylag'] = (pred_df['target_daylag'] > q_train).astype(int)
     else:
         train_df['hl_daylag'] = 0
         pred_df['hl_daylag'] = 0
+
+    if 'continuous_load_score' in cfg.features.context_features:
+        denom = q_train if q_train != 0 else np.nan
+        train_df['continuous_load_score'] = train_df['target_daylag'] / denom
+        pred_df['continuous_load_score'] = pred_df['target_daylag'] / denom
 
     return train_df, pred_df, q_train
 

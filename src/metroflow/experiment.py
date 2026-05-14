@@ -9,7 +9,7 @@ from metroflow.models.boosting import run_megaboost
 from metroflow.models.ets import run_ets
 from metroflow.models.sequence import run_sequence_models
 from metroflow.models.meta import build_prediction_tables, run_linear_meta, run_residual_meta, run_direct_meta_xgb
-from metroflow.evaluation.metrics import result_table, calc_metrics
+from metroflow.evaluation.metrics import result_table, calc_metrics, bootstrap_metric_intervals
 
 
 def _build_metrics_by_model(ets, megaboost, seq, linear_meta, residual_meta, direct_meta):
@@ -68,6 +68,19 @@ def run_experiment(cfg: ExperimentConfig, pass_df: pd.DataFrame | None = None) -
     metrics_by_model = _build_metrics_by_model(ets, megaboost, seq, linear_meta, residual_meta, direct_meta)
     summary_table = result_table(metrics_by_model)
 
+    base_model_cols = [c for c in ['ETS', 'MegaBoost', 'LSTM', 'Transformer-lite'] if c in test_pred_table.columns]
+    best_base_name = result_table({m: metrics_by_model[m] for m in base_model_cols}).index[0]
+    model_cols_for_ci = [c for c in summary_table.index if c in test_pred_table.columns]
+    bootstrap_ci = bootstrap_metric_intervals(
+        test_pred_table,
+        model_cols_for_ci,
+        baseline_col=best_base_name,
+        gamma=cfg.features.load_weight_gamma,
+        n_boot=2000,
+        block_size=max(cfg.horizon_steps, 4),
+        random_state=cfg.models.random_state,
+    )
+
     val_base_metrics = {
         'ETS': ets['val_metrics'],
         'MegaBoost': calc_metrics(split['val_df']['target_h'].values, megaboost['val_pred'], gamma=cfg.features.load_weight_gamma),
@@ -92,5 +105,6 @@ def run_experiment(cfg: ExperimentConfig, pass_df: pd.DataFrame | None = None) -
         'direct_meta': direct_meta,
         'metrics_by_model': metrics_by_model,
         'summary_table': summary_table,
+        'bootstrap_ci': bootstrap_ci,
         'val_base_table': val_base_table,
     }

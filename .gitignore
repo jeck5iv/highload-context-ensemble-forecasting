@@ -23,4 +23,4 @@ Thumbs.db
 
 data/*
 !data/.gitkeep
-!data/README.md
+!data/README.mdoutputs/

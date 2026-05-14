@@ -23,25 +23,86 @@ def make_feature_sets(cfg: ExperimentConfig) -> dict[str, list[str]]:
     lags_short = take(lags, 3)
     lags_mid = take(lags, 5)
     lags_long = take(lags, 8)
+    short_w = r(0)
+
+                                                                         
+                                                                    
+                                                                       
+                                                                          
+                                                     
+    boost_context_features = cfg.features.boosting_context_features
+    if boost_context_features is None:
+        boost_context_features = cfg.features.context_features
+
+                                                            
+    time_context: list[str] = []
+    if 'hour_cyclical' in boost_context_features:
+        time_context.extend(['hour_sin', 'hour_cos'])
+
+                                                                               
+                                           
+    regime_context: list[str] = []
+    if 'highload_daylag' in boost_context_features:
+        regime_context.append('hl_daylag')
+    if 'continuous_load_score' in boost_context_features:
+        regime_context.append('continuous_load_score')
+    if 'local_slope' in boost_context_features:
+        regime_context.extend(['local_slope_1', 'local_slope_2'])
+    if 'daylag_deviation' in boost_context_features:
+        regime_context.extend(['daylag_deviation', 'prev_count_ratio_daylag'])
+    if 'rolling_volatility' in boost_context_features:
+        regime_context.append(f'roll_std_{short_w}')
+
+                                                                       
+    day_lag_cols = [f'lag_{cfg.day_lag}', f'lag_{cfg.day_lag + 1}']
+    base_roll_cols = [f'roll_sum_{r(1)}', f'roll_mean_{r(2)}']
 
     fs = {
-        'lags_short': ([f'lag_{x}' for x in lags_short] + [f'roll_sum_{r(0)}', f'roll_mean_{r(0)}']),
-        'lags_hour': ([f'lag_{x}' for x in lags_mid] + [f'roll_sum_{r(1)}', f'roll_mean_{r(1)}']),
-        'lags_day_time': ([f'lag_{x}' for x in lags_mid] + [f'lag_{cfg.day_lag}', f'lag_{cfg.day_lag+1}', 'hour_sin', 'hour_cos']),
-        'lags_day_time_ctx': ([f'lag_{x}' for x in lags_mid] + [f'lag_{cfg.day_lag}', f'lag_{cfg.day_lag+1}', 'hour_sin', 'hour_cos', 'hl_daylag']),
-        'lags_extended': ([f'lag_{x}' for x in lags_long] + [f'lag_{cfg.day_lag}', f'lag_{cfg.day_lag+1}', 'hour_sin', 'hour_cos', f'roll_sum_{r(1)}', f'roll_mean_{r(2)}']),
-        'lags_extended_ctx': ([f'lag_{x}' for x in lags_long] + [f'lag_{cfg.day_lag}', f'lag_{cfg.day_lag+1}', 'hour_sin', 'hour_cos', f'roll_sum_{r(1)}', f'roll_mean_{r(2)}', 'hl_daylag']),
+        'lags_short': [f'lag_{x}' for x in lags_short] + [f'roll_sum_{r(0)}', f'roll_mean_{r(0)}'],
+        'lags_hour': [f'lag_{x}' for x in lags_mid] + [f'roll_sum_{r(1)}', f'roll_mean_{r(1)}'],
+        'lags_day_time': [f'lag_{x}' for x in lags_mid] + day_lag_cols + time_context,
+        'lags_day_time_ctx': [f'lag_{x}' for x in lags_mid] + day_lag_cols + time_context + regime_context,
+        'lags_extended': [f'lag_{x}' for x in lags_long] + day_lag_cols + time_context + base_roll_cols,
+        'lags_extended_ctx': [f'lag_{x}' for x in lags_long] + day_lag_cols + time_context + base_roll_cols + regime_context,
     }
-    return {k: list(dict.fromkeys(v)) for k, v in fs.items()}
+
+                                                                                
+                                                                           
+                                                   
+    deduped: dict[str, list[str]] = {}
+    seen: set[tuple[str, ...]] = set()
+    for name, cols in fs.items():
+        unique_cols = list(dict.fromkeys(cols))
+        key = tuple(sorted(unique_cols))
+        if key not in seen:
+            deduped[name] = unique_cols
+            seen.add(key)
+
+    return deduped
+
+
+def _xgb_features(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
+                                                                                  
+                                                         
+    return df[feature_cols].replace([np.inf, -np.inf], np.nan).astype(float)
 
 
 def fit_predict_xgb(train_df: pd.DataFrame, pred_df: pd.DataFrame, feature_cols: list[str], params: dict):
-    train_part = train_df.dropna(subset=feature_cols + ['target_h']).copy()
-    pred_part = pred_df.dropna(subset=feature_cols).copy()
+                                                                                  
+                                                                                  
+                                                                                 
+                                                                 
+    train_part = train_df.dropna(subset=['target_h']).copy()
+    if train_part.empty:
+        raise ValueError('No training rows with non-missing target_h for XGBoost')
+
     model = xgb.XGBRegressor(**params)
-    model.fit(train_part[feature_cols], train_part['target_h'])
-    pred = pd.Series(index=pred_df.index, dtype=float)
-    pred.loc[pred_part.index] = model.predict(pred_part[feature_cols])
+    model.fit(_xgb_features(train_part, feature_cols), train_part['target_h'].astype(float))
+
+    pred_values = model.predict(_xgb_features(pred_df, feature_cols))
+    pred = pd.Series(pred_values, index=pred_df.index, dtype=float)
+    if pred.isna().any():
+        raise ValueError(f'XGBoost produced NaN predictions for feature set: {feature_cols}')
     return pred, model
 
 

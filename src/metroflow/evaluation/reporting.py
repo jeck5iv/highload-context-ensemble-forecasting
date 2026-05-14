@@ -20,6 +20,7 @@ def build_experiment_markdown(result: dict) -> str:
     residual = result.get('residual_meta')
     linear = result.get('linear_meta')
     val_base = result.get('val_base_table')
+    bootstrap_ci = result.get('bootstrap_ci')
 
     best_model = summary.index[0]
     best_row = summary.iloc[0]
@@ -56,6 +57,19 @@ def build_experiment_markdown(result: dict) -> str:
     lines.append('## Test summary')
     lines.append(summary.to_markdown())
     lines.append('')
+    if bootstrap_ci is not None:
+        lines.append('## Bootstrap confidence intervals')
+        lines.append('Paired block bootstrap over the test period. Positive deltas mean improvement over the best base model.')
+        lines.append('')
+        metric_ci = bootstrap_ci['metric_ci']
+        delta_ci = bootstrap_ci['delta_ci']
+        lines.append('### Metric 95% confidence intervals')
+        lines.append(metric_ci.to_markdown(index=False))
+        lines.append('')
+        if len(delta_ci) > 0:
+            lines.append('### Paired deltas vs best base model')
+            lines.append(delta_ci.to_markdown(index=False))
+            lines.append('')
     lines.append('## Best overall model')
     lines.append(f"- best_model: {best_model}")
     lines.append(f"- MAE: {best_row['MAE']:.4f}")
@@ -118,6 +132,12 @@ def save_experiment_bundle(result: dict, output_dir: str | Path) -> dict[str, st
     if 'val_base_table' in result and result['val_base_table'] is not None:
         result['val_base_table'].to_csv(output_dir / 'validation_base_ranking.csv')
         paths['validation_base_ranking'] = str(output_dir / 'validation_base_ranking.csv')
+
+    if 'bootstrap_ci' in result and result['bootstrap_ci'] is not None:
+        result['bootstrap_ci']['metric_ci'].to_csv(output_dir / 'bootstrap_metric_ci.csv', index=False)
+        result['bootstrap_ci']['delta_ci'].to_csv(output_dir / 'bootstrap_delta_ci.csv', index=False)
+        paths['bootstrap_metric_ci'] = str(output_dir / 'bootstrap_metric_ci.csv')
+        paths['bootstrap_delta_ci'] = str(output_dir / 'bootstrap_delta_ci.csv')
 
     result['test_pred_table'].to_csv(output_dir / 'test_predictions.csv', index=False)
     result['val_pred_table'].to_csv(output_dir / 'validation_predictions.csv', index=False)

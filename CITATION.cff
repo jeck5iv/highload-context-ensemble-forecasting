@@ -1,0 +1,7 @@
+cff-version: 1.2.0
+title: "Metro Passenger-Flow Forecasting"
+message: "If you use this code, cite the associated article or preprint when available."
+type: software
+authors:
+  - family-names: Kalinin
+    given-names: Ivan

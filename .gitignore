@@ -1,0 +1,46 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+*.Zone.Identifier
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Private data
+data/*
+!data/README.md
+!data/.gitkeep
+
+# Generated outputs
+outputs/
+output/
+output_saves/
+SAVE_MULTISTATION/
+old_stages/
+data_save/
+
+# Large local artifacts
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.pkl
+*.joblib
+
+# Logs
+*.log
+logs/

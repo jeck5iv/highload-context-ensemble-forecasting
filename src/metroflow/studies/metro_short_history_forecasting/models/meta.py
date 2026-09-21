@@ -23,10 +23,7 @@ def _seasonal_anchor_series(df: pd.DataFrame) -> pd.Series:
     seasonal = pd.to_numeric(df["target_daylag"], errors="coerce").astype(float)
     if "lag_96" in df.columns:
         seasonal = seasonal.fillna(pd.to_numeric(df["lag_96"], errors="coerce").astype(float))
-    fallback = float(pd.to_numeric(df["target_h"], errors="coerce").mean()) if "target_h" in df.columns else 0.0
-    if not np.isfinite(fallback):
-        fallback = 0.0
-    return seasonal.fillna(fallback).astype(float)
+    return seasonal.fillna(0.0).astype(float)
 
 def seasonal_daylag_predictions(val_df: pd.DataFrame, test_df: pd.DataFrame) -> dict:
     val_pred = _seasonal_anchor_series(val_df).values.astype(float)

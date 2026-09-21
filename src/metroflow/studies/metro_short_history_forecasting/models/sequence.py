@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..common import *
+from .meta import _seasonal_anchor_series
 from ..config import (
     DEFAULT_CLASSIC_METRO_LINE_CODES,
     _scope_name,
@@ -85,9 +86,10 @@ def _sequence_eval_pred_to_frame_order(payload: dict, raw_pred: np.ndarray, eval
     pred_unscaled = np.maximum(pred_unscaled, 0.0)
     series = pd.Series(pred_unscaled, index=payload["eval_indices"], dtype=float)
     missing = eval_df.index.difference(series.index)
+    series = series.reindex(eval_df.index)
     if len(missing):
                                                                                                
-        fallback = eval_df.loc[missing, "target_daylag"].fillna(eval_df.loc[missing, "lag_96"]).fillna(eval_df["target_h"].mean())
+        fallback = _seasonal_anchor_series(eval_df.loc[missing])
         series.loc[missing] = fallback.values.astype(float)
     return series.loc[eval_df.index].values.astype(float)
 

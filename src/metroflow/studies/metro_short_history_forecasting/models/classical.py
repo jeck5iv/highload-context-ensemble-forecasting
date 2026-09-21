@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..common import *
+from .meta import _seasonal_anchor_series
 from ..config import (
     DEFAULT_CLASSIC_METRO_LINE_CODES,
     _scope_name,
@@ -72,7 +73,7 @@ def _run_local_ets(
             val_pred.loc[eval_idx] = pred[:len(eval_idx)]
         except Exception:
             fallback_stations_val.append(str(station_key))
-            fallback = eval_station.sort_values(cfg.time_col)["target_daylag"].fillna(eval_station["lag_96"]).fillna(eval_station["target_h"].mean())
+            fallback = _seasonal_anchor_series(eval_station.sort_values(cfg.time_col))
             val_pred.loc[eval_idx] = fallback.values.astype(float)
 
     for station_key, eval_station in test_df.groupby("station_key", sort=False):
@@ -86,7 +87,7 @@ def _run_local_ets(
             test_pred.loc[eval_idx] = pred[:len(eval_idx)]
         except Exception:
             fallback_stations_test.append(str(station_key))
-            fallback = eval_station.sort_values(cfg.time_col)["target_daylag"].fillna(eval_station["lag_96"]).fillna(eval_station["target_h"].mean())
+            fallback = _seasonal_anchor_series(eval_station.sort_values(cfg.time_col))
             test_pred.loc[eval_idx] = fallback.values.astype(float)
 
     if val_pred.isna().any() or test_pred.isna().any():
@@ -156,11 +157,7 @@ def _local_sarima_prediction_for_split(
             pred.loc[eval_idx] = station_pred[:len(eval_idx)]
         except Exception:
             fallback_stations.append(str(station_key))
-            fallback = (
-                eval_station.sort_values(cfg.time_col)["target_daylag"]
-                .fillna(eval_station["lag_96"])
-                .fillna(eval_station["target_h"].mean())
-            )
+            fallback = _seasonal_anchor_series(eval_station.sort_values(cfg.time_col))
             pred.loc[eval_idx] = fallback.values.astype(float)
     if pred.isna().any():
         raise ValueError("Local SARIMA produced missing predictions after fallback")

@@ -1,168 +1,79 @@
-# Metro Passenger-Flow Forecasting
+# Forecasting passenger flow with a short history
 
-[English](README.md) | [Русский](README_RU.md)
+My bachelor's thesis asked how to forecast busy periods when there are many related time series but very little history for each one.
 
-This repository contains a reproducible research pipeline for short-history, multi-station forecasting of inbound metro passenger flow. The main experiment evaluates seasonal/statistical baselines, boosting models, lightweight sequence models, article-inspired comparators, and residual meta-ensembles under a single leakage-aware protocol.
+I used roughly 50 million entry events from one week of the Moscow Metro. After filtering and aggregation, the study covered 260 stations. The strongest central result came from a simple structure: fit ETS separately at each station, then learn a shared correction to its errors with XGBoost.
 
-The code is organized as a study package rather than a collection of notebooks. The public entry point is deliberately narrow:
+## Main result
 
-```python
-from metroflow.studies.metro_short_history_forecasting.entrypoint import (
-    MultiStationForecastConfig,
-    run_multistation_forecasting_experiment,
-    save_multistation_forecasting_result,
-)
-```
+For the next-hour forecast on a 15-minute grid, the residual model reduced load-weighted MAE from 82.52 to 79.51, a 3.6% improvement over local ETS. Ordinary MAE fell from 57.48 to 53.97, or 6.1%.
 
-## Repository layout
+| Model | MAE | Load-weighted MAE | High-load MAE |
+| --- | ---: | ---: | ---: |
+| Previous-day seasonal baseline | 58.70 | 88.82 | 104.14 |
+| Local ETS | 57.48 | 82.52 | 98.30 |
+| ETS with pooled linear correction | 55.58 | 79.90 | 94.59 |
+| ETS with pooled XGBoost correction | 53.32 | 80.08 | 94.58 |
+| ETS with load-weighted XGBoost correction | 53.97 | 79.51 | 93.75 |
 
-```text
-configs/                         experiment presets and grid settings
-data/                            local data placeholder, not versioned
-docs/                            data contract, reproducibility notes, refactor notes
-notebooks/                       short repository check and optional full run
-scripts/                         command-line entry points
-src/metroflow/                   Python package
-  studies/metro_short_history_forecasting/
-    entrypoint.py                public API for the study
-    config.py                    experiment configuration
-    pipeline.py                  orchestration of the full forecasting run
-    data_layer/                  station mapping, aggregation, supervised frame
-    models/                      baselines, boosting, sequence, article-inspired, meta models
-    evaluation/                  metrics and station bootstrap
-    io.py                        output writer
-tests/                           quick checks and regression fixtures
-```
+These are saved thesis results, not a new training run. The public audit found and removed target-dependent fallbacks used when models fail or history is missing. Aggregate fixtures cannot establish whether these paths affected the recorded scores; a full rerun on the private data is still needed. The station-bootstrap 95% interval for the recorded 3.01-point improvement over ETS is [1.93, 4.07]. It measures variation across the observed station panel, not performance on new weeks.
 
-The vertical structure is intentional: `entrypoint.py` exposes the study API, `pipeline.py` coordinates stages, and lower-level modules implement data preparation, models, evaluation, and output writing.
+The data cover 10-16 March 2025. The main comparison trains on Monday and Tuesday, uses Wednesday for model selection and residual fitting, and evaluates on Thursday. Friday and the weekend are outside that comparison. Fifty million events should not be mistaken for a long time-series sample.
 
-## Installation
+[Research note](docs/research.md) covers the model, validation, unsuccessful approaches and the eight horizon/grid settings. [Saved central results](tests/fixtures/h060m_b015m/micro_metrics.csv) provide the full comparison.
 
-For the lightweight checks:
+## Why a local model and a shared correction?
+
+A station's daily profile is useful even when there are few observed days. ETS retains that profile. A pooled model can then learn where the local forecast tends to miss using errors from many stations.
+
+The correction sees base forecasts and their disagreement, time-of-day features, recent changes, rolling variability, previous-day demand and training-period station summaries. Load weighting puts more emphasis on busy intervals. Corrections are clipped using residual quantiles estimated before the test day.
+
+Global boosting, sequence models and context-dependent blends were also evaluated. In this short-history setting, the larger models did not consistently beat local ETS. The research note keeps those results and distinguishes article-inspired adaptations from exact paper reproductions.
+
+## Run the checks
+
+Python 3.11 or 3.12:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
-python -m pip install -r requirements.txt
+pip install -e '.[dev]'
+pytest
+python scripts/summarize_results.py
 ```
 
-For the full model set:
+The tests use synthetic examples and aggregate regression fixtures. They require neither raw operational data nor a GPU. The summary command reads the saved central results; it does not retrain the models.
+
+## Run an experiment
+
+Raw events are not public. If you have authorized data in the format described in the [data contract](docs/data_contract.md):
 
 ```bash
-python -m pip install -e '.[full]'
-python -m pip install -r requirements-full.txt
-```
-
-## Data
-
-Raw operational data are not included. The expected local layout is described in [`docs/data_contract.md`](docs/data_contract.md). A typical local setup is:
-
-```text
-data/
-  PASS_ALL_*.csv
-  REF_PSG_PLACES_*.csv
-  cache/
-```
-
-Optional weather covariates can be supplied through `MultiStationForecastConfig.weather_csv` or by placing a matching `weather_*_hourly_openmeteo_*.csv` file in `data/`.
-
-## Quick checks
-
-Run the fast test suite:
-
-```bash
-make test
-```
-
-This does not train the full model set. It checks imports, metrics, deterministic station-bootstrap behavior, package structure, and compact regression fixtures.
-
-Run the notebook check:
-
-```bash
-jupyter nbconvert --execute notebooks/00_repository_check.ipynb --to notebook --inplace
-```
-
-The notebook keeps the full experiment disabled by default:
-
-```python
-RUN_FULL_EXPERIMENT = False
-```
-
-With this value the notebook performs only a fast repository check. Setting it to `True` runs a real forecasting experiment and writes outputs to `outputs/notebook_forecasting_run`.
-
-## Full central run
-
-```bash
-PYTHONPATH=src python scripts/run_metro_forecasting.py \
+pip install -e '.[full]'
+python scripts/run_metro_forecasting.py \
   --data-dir ./data \
   --cache-dir ./data/cache \
   --output-dir ./outputs/metro_short_history_h060_b015 \
   --n-bootstrap 1000
 ```
 
-The default configuration uses:
-
-```text
-bucket_minutes = 15
-horizon_minutes = 60
-operational_day_start_hour = 3
-random_state = 3228
-```
-
-To run a faster honest validation on local data, use a coarser bucket and disable bootstrap through the Python API or the grid script.
-
-## Horizon-bucket grid
+For a smaller end-to-end check:
 
 ```bash
-PYTHONPATH=src python scripts/run_horizon_bucket_grid.py \
-  --profile robustness \
-  --only 60:60 \
+python scripts/run_horizon_bucket_grid.py \
+  --profile robustness --only 60:60 \
   --output-root outputs/verify_fast \
-  --with-bootstrap \
-  --n-bootstrap 20 \
-  --rerun
+  --with-bootstrap --n-bootstrap 20 --rerun
 ```
 
-The `60:60` setting is useful for validating the data path, station mapping, feature construction, model training, metrics, and output writing without running the full grid.
+The seed is 3228. An operational day runs from 03:00 to 02:59. Target windows are clipped at split boundaries so a training label cannot cross into the next day.
 
-## Outputs
+## Repository
 
-Each experiment directory contains machine-readable artifacts such as:
+The study lives in `src/metroflow/studies/metro_short_history_forecasting/`. Its `entrypoint.py` exposes the configuration, runner and output writer. `models/` contains local, global and residual methods. `evaluation/` defines the metrics and station bootstrap.
 
-```text
-micro_metrics.csv
-macro_metrics.csv
-station_bootstrap_delta_ci.csv
-station_bootstrap_metric_ci.csv
-test_predictions.csv
-validation_predictions.csv
-stations_used.csv
-stage_timings.csv
-```
+[Reproducibility](docs/reproducibility.md) describes the verification sequence. [Prediction artifacts](docs/prediction_artifacts.md) documents the output format. The older [single-station notebook](https://github.com/jeck5iv/Kalinin_Diplom_AMI) is an exploratory predecessor, not a second independent project.
 
-The prediction artifact builder reads saved outputs and prepares report-facing CSV, LaTeX tables, and figures without retraining models:
+## Scope
 
-```bash
-PYTHONPATH=src python scripts/build_prediction_artifacts.py \
-  --megagrid-root outputs/multistation_megagrid_overnight_MAIN_RESULT \
-  --out-dir outputs/prediction_artifacts
-```
-
-## Regression comparison
-
-After a new run, compare saved outputs with a fixture or a previous run:
-
-```bash
-PYTHONPATH=src python scripts/compare_regression_outputs.py \
-  --old-dir tests/fixtures/h060m_b015m \
-  --new-dir outputs/metro_short_history_h060_b015
-```
-
-For strict seed checks, compare two fresh runs with the same configuration. Bootstrap can be disabled first, then enabled with a small number of resamples.
-
-## Reproducibility notes
-
-The main seed is fixed at `3228`. The operational day is defined as `03:00-02:59`, and temporal splitting is based on that operational day. Station-level bootstrap uses stations as resampling units and is applied after predictions are fixed.
-
-Private raw data are deliberately excluded from the repository. Reproducibility is provided through the code, configuration, output contract, regression fixtures, and saved experiment artifacts.
+The public repository contains code, configuration and aggregate results. It excludes passenger records and trained artifacts derived from the closed data. The full thesis is based on one short calendar segment. Model selection, station dependence, overlapping targets and comparisons across many candidate models limit the strength of the conclusions. The next useful test is a frozen evaluation on additional weeks.

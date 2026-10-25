@@ -1,7 +1,12 @@
 cff-version: 1.2.0
-title: "Metro Passenger-Flow Forecasting"
-message: "If you use this code, cite the associated article or preprint when available."
+message: "If you use this code, cite this repository. No associated peer-reviewed publication is claimed."
 type: software
+title: "Forecasting with Short Histories: Local Statistical Models and Pooled Residual Learning"
 authors:
   - family-names: Kalinin
     given-names: Ivan
+repository-code: "https://github.com/jeck5iv/highload-context-ensemble-forecasting"
+keywords:
+  - time-series forecasting
+  - residual learning
+  - statistical modelling
